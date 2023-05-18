@@ -9,15 +9,17 @@ const get = async (id) => {
 
     let user = await cache.client.get(id)
     if (user == null){
-        console.log(`Cache MISSED`)
+        console.log(`Cache MISSED (${id})`)
+        console.log(`Getting user profile for ${id} from DATABASE.`)
         user = await User.findOne({ where: { user_id: id } })
-        await cache.client.set(id, JSON.stringify(user));
+        await cache.client.set(id, JSON.stringify(user), { EX: 5 * 60});
         console.log(`Save user to redis`);
-    } else {
-        console.log(`Cache HIT`);
-    }
 
-    return user;
+        return user;
+    } else {
+        console.log(`Cache HIT (${id})`);
+        return JSON.parse(user)
+    }
 }
 
 const getAll = async () => {
@@ -40,8 +42,35 @@ const create = async(firstname, lastname) => {
     return user;
 }
 
+const update = async(id, firstname, lastname) => {
+    const User = ModelUser.get(sequelize);
+    let user = await User.findOne({ where: { user_id: id } })
+    if (user == null ){
+        return null;
+    }
+
+
+    if (firstname === '' || firstname == undefined || firstname == null ){
+        return null
+    }
+
+    if (lastname === '' || lastname == undefined || lastname == null ){
+        return null
+    }
+
+    await User.update({ firstname: firstname, lastname: lastname}, { where: { user_id: id}})
+    user = await User.findOne({ where: { user_id: id } })
+
+    // Invalidate cache
+    cache.client.del(id)
+    console.log(`Cache key delete: ${id}`);
+
+    return user;
+}
+
 module.exports = {
     get,
     getAll,
-    create
+    create, 
+    update
 }
